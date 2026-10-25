@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Parking Lot Producer–Consumer Simulator</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--tx:#1b1f24;--mut:#6b7280;--bd:#dfe3e8;--ok:#1a9c5b;--warn:#d98a00;--bad:#d93a3a;--blu:#2f6fdd;--slot:#eef1f5;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12151a;--card:#1b2028;--tx:#e8ebf0;--mut:#98a2b3;--bd:#2d3440;--slot:#262d38;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif;padding:12px;max-width:1100px;margin:auto}
+h1{font-size:19px;margin:4px 0 2px}p.s{margin:0 0 10px;color:var(--mut)}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px;margin-bottom:10px}
+.card h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:0 0 8px}
+.ctl{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px 14px}
+.ctl label{font-size:12px;color:var(--mut);display:block}.ctl input[type=range]{width:100%}
+.btns{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+button{background:var(--card);color:var(--tx);border:1px solid var(--bd);border-radius:8px;padding:7px 12px;font:inherit;cursor:pointer}
+button.p{background:var(--blu);color:#fff;border-color:var(--blu)}button.on{outline:2px solid var(--blu)}
+.mode{display:flex;gap:6px;margin-bottom:10px}.mode button{flex:1}
+.main{display:grid;grid-template-columns:1fr;gap:10px}
+@media(min-width:800px){.main{grid-template-columns:1fr 1fr}}
+.lot{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px}
+.slot{background:var(--slot);border:2px dashed var(--bd);border-radius:8px;height:62px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:11px;color:var(--mut);position:relative}
+.slot.f{border-style:solid;border-color:var(--ok);color:var(--tx)}.slot b{font-size:22px;line-height:1}
+.slot.ptr:after{content:attr(data-p);position:absolute;top:-1px;right:2px;font-size:9px;color:var(--blu);font-weight:700}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--bd);border-radius:8px;padding:4px 8px;font-size:12px;background:var(--slot)}
+.chip.idle{color:var(--mut)}.chip.blk{border-color:var(--bad);color:var(--bad)}.chip.wm{border-color:var(--blu);color:var(--blu)}.chip.cs{border-color:var(--warn);color:var(--warn);font-weight:600}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:6px}
+.st{background:var(--slot);border-radius:8px;padding:6px 8px}.st span{display:block;font-size:11px;color:var(--mut)}.st b{font-size:17px}
+.bad{color:var(--bad)}.ok{color:var(--ok)}
+.banner{padding:8px 10px;border-radius:8px;margin-bottom:8px;font-weight:600;font-size:13px;background:var(--slot)}
+.banner.full{background:rgba(217,58,58,.15);color:var(--bad)}.banner.empty{background:rgba(47,111,221,.15);color:var(--blu)}
+#log{height:190px;overflow:auto;font:12px/1.5 ui-monospace,Menlo,monospace}
+#log div{border-bottom:1px solid var(--bd);padding:1px 0}.l-race{color:var(--bad);font-weight:600}.l-full{color:var(--warn)}.l-empty{color:var(--blu)}
+.code{font:12px/1.5 ui-monospace,Menlo,monospace;white-space:pre-wrap;color:var(--mut)}
+</style></head><body>
+<h1>🅿️ Parking Lot Simulator – Producer / Consumer</h1>
+<p class="s">Cars entering = <b>producers</b>, cars leaving = <b>consumers</b>, parking slots = <b>bounded buffer</b>.</p>
+
+<div class="card">
+<div class="mode"><button id="mSync" class="on">✅ Synchronized (semaphores + mutex)</button><button id="mUnsafe">⚠️ Unsafe (race condition)</button></div>
+<div class="ctl">
+<div><label>Parking slots (buffer size): <b id="vN">6</b></label><input type="range" id="N" min="2" max="12" value="6"></div>
+<div><label>Entry gates (producers): <b id="vP">3</b></label><input type="range" id="P" min="1" max="5" value="3"></div>
+<div><label>Exit gates (consumers): <b id="vC">3</b></label><input type="range" id="C" min="1" max="5" value="3"></div>
+<div><label>Arrival rate: <b id="vPR">5</b></label><input type="range" id="PR" min="1" max="10" value="5"></div>
+<div><label>Departure rate: <b id="vCR">5</b></label><input type="range" id="CR" min="1" max="10" value="5"></div>
+<div><label>Sim speed: <b id="vSP">6</b></label><input type="range" id="SP" min="1" max="10" value="6"></div>
+</div>
+<div class="btns">
+<button class="p" id="go">▶ Start</button><button id="step">⏭ Step</button><button id="reset">↺ Reset</button>
+<button id="pFull">Scenario: Fill buffer (full)</button><button id="pEmpty">Scenario: Empty buffer</button><button id="pRace">Scenario: Race condition</button>
+</div></div>
+
+<div class="main">
+<div>
+<div class="card"><h2>Parking lot (circular buffer)</h2><div id="ban" class="banner"></div><div class="lot" id="lot"></div></div>
+<div class="card"><h2>Entry gates – producers</h2><div class="chips" id="prod"></div><h2 style="margin-top:12px">Exit gates – consumers</h2><div class="chips" id="cons"></div></div>
+</div>
+<div>
+<div class="card"><h2>Shared state</h2><div class="stats" id="stats"></div></div>
+<div class="card"><h2>Event log</h2><div id="log"></div></div>
+</div></div>
+
+<div class="card"><h2>Algorithm being simulated</h2><div class="code" id="algo"></div></div>
+
+<script>
+const $=id=>document.getElementById(id);
+let cfg,S,slots,count,inP,outP,agents,stats,mode='sync',run=false,timer=null,carId=0,tickNo=0;
+const rnd=()=>Math.random();
+function log(m,c=''){const d=document.createElement('div');d.className=c;d.textContent='['+tickNo+'] '+m;const L=$('log');L.appendChild(d);while(L.children.length>120)L.removeChild(L.firstChild);L.scrollTop=L.scrollHeight}
+function idle(a){const r=a.t=='P'?cfg.PR:cfg.CR;a.timer=Math.max(1,Math.round((11-r)*2*(.4+rnd()*1.2)));a.st='idle';a.flag=false}
+function readCfg(){cfg={N:+$('N').value,P:+$('P').value,C:+$('C').value,PR:+$('PR').value,CR:+$('CR').value,SP:+$('SP').value};
+['N','P','C','PR','CR','SP'].forEach(k=>$('v'+k).textContent=cfg[k])}
+function init(){readCfg();pause();S={empty:cfg.N,full:0,mutex:1};slots=Array(cfg.N).fill(null);count=0;inP=0;outP=0;carId=0;tickNo=0;
+stats={prod:0,cons:0,fullB:0,emptyB:0,race:0,lost:0,ghost:0,over:0};agents=[];
+for(let i=1;i<=cfg.P;i++){const a={t:'P',n:'P'+i,st:'idle'};idle(a);agents.push(a)}
+for(let i=1;i<=cfg.C;i++){const a={t:'C',n:'C'+i,st:'idle'};idle(a);agents.push(a)}
+$('log').innerHTML='';log('Simulation ready – mode: '+(mode=='sync'?'SYNCHRONIZED':'UNSAFE'));render();algo()}
+const inCS=()=>agents.filter(a=>/^c[123]$/.test(a.st));
+function enterCS(a){a.st='c1';const o=inCS().filter(x=>x!==a);if(mode=='unsafe'&&o.length){stats.race++;log('RACE: '+a.n+' entered critical section while '+o.map(x=>x.n).join(', ')+' still inside!','l-race')}}
+function stepAgent(a){
+if(a.st=='idle'){if(--a.timer>0)return;a.st=a.t=='P'?'wantSlot':'wantItem'}
+if(mode=='sync'){
+ if(a.st=='wantSlot'){if(S.empty>0){S.empty--;a.st='wantMutex';a.flag=false;log(a.n+': wait(empty) ok → empty='+S.empty)}else{if(!a.flag){a.flag=true;stats.fullB++;log(a.n+': BUFFER FULL – blocked on wait(empty), car waits outside','l-full')}return}}
+ if(a.st=='wantItem'){if(S.full>0){S.full--;a.st='wantMutex';a.flag=false;log(a.n+': wait(full) ok → full='+S.full)}else{if(!a.flag){a.flag=true;stats.emptyB++;log(a.n+': BUFFER EMPTY – blocked on wait(full), nothing to remove','l-empty')}return}}
+ if(a.st=='wantMutex'){if(S.mutex==1){S.mutex=0;a.st='c1';log(a.n+': wait(mutex) – lock acquired')}else return;return}
+ if(a.st=='c1'){a.local=count;a.st='c2';return}
+ if(a.st=='c2'){if(a.t=='P'){a.idx=inP;inP=(inP+1)%cfg.N;slots[a.idx]={id:++carId};a.car=carId;log(a.n+': car #'+a.car+' parked in slot '+a.idx)}else{a.idx=outP;outP=(outP+1)%cfg.N;const c=slots[a.idx];slots[a.idx]=null;log(a.n+': car #'+(c?c.id:'?')+' left slot '+a.idx)}a.st='c3';return}
+ if(a.st=='c3'){count=a.local+(a.t=='P'?1:-1);S.mutex=1;if(a.t=='P'){S.full++;stats.prod++}else{S.empty++;stats.cons++}log(a.n+': signal(mutex), signal('+(a.t=='P'?'full':'empty')+')');idle(a)}
+}else{
+ if(a.st=='wantSlot'){if(count>=cfg.N){if(!a.flag){a.flag=true;stats.fullB++;log(a.n+': sees count='+count+' (full) – busy-waiting','l-full')}return}a.flag=false;enterCS(a);return}
+ if(a.st=='wantItem'){if(count<=0){if(!a.flag){a.flag=true;stats.emptyB++;log(a.n+': sees count='+count+' (empty) – busy-waiting','l-empty')}return}a.flag=false;enterCS(a);return}
+ if(a.st=='c1'){a.local=count;a.idx=a.t=='P'?inP:outP;log(a.n+': reads count='+a.local+', slot index='+a.idx);a.st='c2';return}
+ if(a.st=='c2'){if(a.t=='P'){if(slots[a.idx]){stats.lost++;stats.over++;log('DATA LOSS: '+a.n+' overwrote car #'+slots[a.idx].id+' in slot '+a.idx+'!','l-race')}slots[a.idx]={id:++carId};a.car=carId}else{if(!slots[a.idx]){stats.ghost++;log('UNDERFLOW: '+a.n+' removed a car from EMPTY slot '+a.idx+'!','l-race')}slots[a.idx]=null}a.st='c3';return}
+ if(a.st=='c3'){const before=count;count=a.local+(a.t=='P'?1:-1);if(a.t=='P')inP=(a.idx+1)%cfg.N;else outP=(a.idx+1)%cfg.N;
+  const real=slots.filter(Boolean).length;if(count!=real)log(a.n+': wrote count='+count+' but real cars='+real+' (lost update!)','l-race');a.t=='P'?stats.prod++:stats.cons++;idle(a)}
+}}
+function tick(){tickNo++;const o=[...agents].sort(()=>rnd()-.5);o.forEach(stepAgent);render()}
+function render(){
+const N=cfg.N,occ=slots.filter(Boolean).length;
+$('lot').innerHTML=slots.map((s,i)=>'<div class="slot'+(s?' f':'')+(i==inP&&i==outP?' ptr" data-p="IN/OUT':i==inP?' ptr" data-p="IN':i==outP?' ptr" data-p="OUT':'')+'">'+(s?'<b>🚗</b>#'+s.id:'free')+'<small>slot '+i+'</small></div>').join('');
+const b=$('ban');if(occ>=N||count>=N){b.className='banner full';b.textContent='🔴 BUFFER FULL – producers must block (no free slot)'}else if(occ==0){b.className='banner empty';b.textContent='🔵 BUFFER EMPTY – consumers must block (no car to remove)'}else{b.className='banner';b.textContent='🟢 '+occ+' / '+N+' slots occupied'}
+const chip=a=>{let c='idle',t='idle';const s=a.st;if(s=='wantSlot'||s=='wantItem'){c=a.flag?'blk':'idle';t=a.flag?'⛔ blocked':'ready'}else if(s=='wantMutex'){c='wm';t='waiting mutex'}else if(/^c/.test(s)){c='cs';t='🔒 critical '+s.slice(1)+'/3'}else t='idle '+a.timer;return'<span class="chip '+c+'">'+a.n+' · '+t+'</span>'};
+$('prod').innerHTML=agents.filter(a=>a.t=='P').map(chip).join('');$('cons').innerHTML=agents.filter(a=>a.t=='C').map(chip).join('');
+const mis=count!=occ;
+const st=(l,v,c='')=>'<div class="st"><span>'+l+'</span><b class="'+c+'">'+v+'</b></div>';
+$('stats').innerHTML=st('count variable',count,mis?'bad':'')+st('actual cars',occ)+(mode=='sync'?st('sem empty',S.empty)+st('sem full',S.full)+st('mutex',S.mutex):'')+st('cars parked',stats.prod)+st('cars left',stats.cons)+st('full-block events',stats.fullB)+st('empty-block events',stats.emptyB)+(mode=='unsafe'?st('race events',stats.race,stats.race?'bad':'')+st('cars lost (overwrite)',stats.lost,stats.lost?'bad':'')+st('underflows',stats.ghost,stats.ghost?'bad':'')+st('count mismatch',mis?'YES':'no',mis?'bad':'ok'):'');
+}
+function algo(){$('algo').textContent=mode=='sync'?
+`Producer (car enters)         Consumer (car leaves)
+wait(empty)  // free slot?    wait(full)   // any car?
+wait(mutex)  // lock          wait(mutex)
+  buffer[in] = car              car = buffer[out]
+  in = (in+1) % N               out = (out+1) % N
+  count++                       count--
+signal(mutex)                 signal(mutex)
+signal(full)                  signal(empty)
+→ Full lot: producers sleep on 'empty'. Empty lot: consumers sleep on 'full'. Only one thread in the critical section.`:
+`Producer (NO locking)         Consumer (NO locking)
+while(count == N) wait;       while(count == 0) wait;
+local = count                 local = count
+idx = in                      idx = out
+buffer[idx] = car   <-- another thread may interleave here
+count = local + 1             count = local - 1
+→ Two threads read the same count/index → overwritten cars, lost updates, count ≠ real cars, underflow/overflow.`}
+function play(){if(run)return;run=true;$('go').textContent='⏸ Pause';timer=setInterval(tick,Math.round(1100/cfg.SP/1.2)+40)}
+function pause(){run=false;$('go').textContent='▶ Start';clearInterval(timer)}
+function setMode(m){mode=m;$('mSync').classList.toggle('on',m=='sync');$('mUnsafe').classList.toggle('on',m=='unsafe');init()}
+function set(o,modeSel){mode=modeSel;$('mSync').classList.toggle('on',mode=='sync');$('mUnsafe').classList.toggle('on',mode=='unsafe');for(const k in o){$(k).value=o[k]}init();play()}
+$('go').onclick=()=>run?pause():play();$('step').onclick=()=>{pause();tick()};$('reset').onclick=init;
+$('mSync').onclick=()=>setMode('sync');$('mUnsafe').onclick=()=>setMode('unsafe');
+['N','P','C'].forEach(k=>$(k).oninput=init);
+['PR','CR','SP'].forEach(k=>$(k).oninput=()=>{const r=run;readCfg();if(r){pause();play()}});
+$('pFull').onclick=()=>set({N:5,P:4,C:1,PR:9,CR:2,SP:6},mode);
+$('pEmpty').onclick=()=>set({N:5,P:1,C:4,PR:2,CR:9,SP:6},mode);
+$('pRace').onclick=()=>set({N:6,P:4,C:4,PR:8,CR:8,SP:5},'unsafe');
+init();
+</script></body></html>
